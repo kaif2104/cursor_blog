@@ -46,54 +46,47 @@ def user_logout(request):
     messages.success(request, 'You have been logged out successfully.')
     return redirect('home')
 
-class PostListView(ListView):
-    """View for listing all blog posts"""
-    model = Post
-    template_name = 'blog/post_list.html'
-    context_object_name = 'posts'
-    ordering = ['-created_date']
-    paginate_by = 5
+def post_list(request):
+    posts = Post.objects.all().order_by('-created_date')
+    return render(request, 'blog/post_list.html', {'posts': posts})
 
-class PostDetailView(DetailView):
-    """View for displaying a single blog post"""
-    model = Post
-    template_name = 'blog/post_detail.html'
+def post_detail(request, pk):
+    post = get_object_or_404(Post, pk=pk)
+    return render(request, 'blog/post_detail.html', {'post': post})
 
-class PostCreateView(LoginRequiredMixin, CreateView):
-    """View for creating a new blog post"""
-    model = Post
-    form_class = PostForm
-    template_name = 'blog/post_form.html'
-    
-    def form_valid(self, form):
-        form.instance.author = self.request.user
-        messages.success(self.request, 'Post created successfully!')
-        return super().form_valid(form)
+@login_required
+def post_create(request):
+    if request.method == 'POST':
+        form = PostForm(request.POST)
+        if form.is_valid():
+            post = form.save(commit=False)
+            post.author = request.user
+            post.save()
+            return redirect('post_detail', pk=post.pk)
+    else:
+        form = PostForm()
+    return render(request, 'blog/post_form.html', {'form': form})
 
-class PostUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
-    """View for updating a blog post"""
-    model = Post
-    form_class = PostForm
-    template_name = 'blog/post_form.html'
-    
-    def form_valid(self, form):
-        messages.success(self.request, 'Post updated successfully!')
-        return super().form_valid(form)
-    
-    def test_func(self):
-        post = self.get_object()
-        return self.request.user == post.author
+@login_required
+def post_update(request, pk):
+    post = get_object_or_404(Post, pk=pk)
+    if request.user != post.author:
+        return redirect('post_detail', pk=pk)
+    if request.method == 'POST':
+        form = PostForm(request.POST, instance=post)
+        if form.is_valid():
+            form.save()
+            return redirect('post_detail', pk=post.pk)
+    else:
+        form = PostForm(instance=post)
+    return render(request, 'blog/post_form.html', {'form': form})
 
-class PostDeleteView(LoginRequiredMixin, UserPassesTestMixin, DeleteView):
-    """View for deleting a blog post"""
-    model = Post
-    template_name = 'blog/post_confirm_delete.html'
-    success_url = reverse_lazy('post_list')
-    
-    def test_func(self):
-        post = self.get_object()
-        return self.request.user == post.author
-    
-    def delete(self, request, *args, **kwargs):
-        messages.success(request, 'Post deleted successfully!')
-        return super().delete(request, *args, **kwargs)
+@login_required
+def post_delete(request, pk):
+    post = get_object_or_404(Post, pk=pk)
+    if request.user != post.author:
+        return redirect('post_detail', pk=pk)
+    if request.method == 'POST':
+        post.delete()
+        return redirect('post_list')
+    return render(request, 'blog/post_confirm_delete.html', {'object': post})
